@@ -23,6 +23,8 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+/mnt/nvme/llm/models/
+/mnt/nvme/llm/llama.cpp/
 
 # Virtual environments
 .env
