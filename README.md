@@ -98,3 +98,8 @@ This ensures secure handling of secrets while keeping deployments reproducible.
      * Streaming token-by-token responses to Telegram.
      * Worker queue for parallel tasks (non-blocking handlers).
      * Optional web dashboard for logs, metrics, and model monitoring.
+
+ ## About the README and the Project
+   This is still a work in progress personal project so it will be updated with de docker-compose.yml file and Dockerfile that are necessary for deployment.
+   Also, the README will be updated to rpovide information about the deployment itself.
+   Be patient... ;)
