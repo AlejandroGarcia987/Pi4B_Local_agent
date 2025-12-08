@@ -4,6 +4,7 @@ import logging
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from src.config import settings
+from src.llm_client import ask_llm
 
 
 # Logging basic config
@@ -23,6 +24,32 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     )
 
 async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # Forward User message to LLM and answer (simple)
+    user_text = update.message.text
+    sent = await update.message.reply_text(f"Received message: '{user_text}'. Processing...")
+
+    # Build a short prompt; tune prompt engineering here
+    prompt = f"User: {user_text}\n\nAnswer in Spanish"
+
+    # Call LLM (async)
+    llm_resp = await ask_llm(prompt, timeout_s=settings.LLM_TIMEOUT_S)
+
+    if llm_resp:
+        # send final answer (edit the placeholder message)
+        try:
+            await context.bot.edit_message_text(chat_id=sent.chat_id, message_id=sent.message_id, text=llm_resp)
+        except Exception:
+            # fallback: send a new message
+            await context.bot.send_message(chat_id=sent.chat_id, text=llm_resp)
+    else:
+        try:
+            await context.bot.edit_message_text(chat_id=sent.chat_id, message_id=sent.message_id,
+                                                text="No response from LLM (timeout/error).")
+        except Exception:
+            await context.bot.send_message(chat_id=sent.chat_id, text="No response from LLM (timeout/error).")
+
+
+async def echo_legacy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Echoes user message"""
     await update.message.reply_text(f"Received message: '{update.message.text}'. Processing...")
 
