@@ -1,5 +1,6 @@
-from pydantic import BaseSettings, SettingsConfigDict
 from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
 
 class Settings(BaseSettings):
     #Pydantic config to load form .env
