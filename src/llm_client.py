@@ -64,5 +64,5 @@ async def ask_llm(prompt: str, timeout_s: int = LLM_TIMEOUT) -> Optional[str]:
                     return (choice.get("message", {}) or {}).get("content") or choice.get("text")
                 return str(data)
     except Exception as e:
-        print("ask_llm error:", e)
+        print("ask_llm error: ",e)
         return None
