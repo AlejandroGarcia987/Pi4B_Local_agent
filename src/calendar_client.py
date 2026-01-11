@@ -4,7 +4,6 @@ from typing import List, Dict
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
 
@@ -14,7 +13,6 @@ SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SECRETS_DIR = os.path.join(BASE_DIR, "secrets")
 
-CREDENTIALS_FILE = os.path.join(SECRETS_DIR, "google_calendar_credentials.json")
 TOKEN_FILE = os.path.join(SECRETS_DIR, "google_calendar_token.json")
 
 
@@ -23,36 +21,19 @@ class GoogleCalendarClient:
         self.service = self._authenticate()
 
     def _authenticate(self):
-        creds = None
+        if not os.path.exists(TOKEN_FILE):
+            raise RuntimeError(
+                "Google Calendar token not found. "
+                "Run OAuth flow on host first."
+            )
 
-        if os.path.exists(TOKEN_FILE):
-            creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
+        creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
 
-        if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
+        if not creds.valid:
+            if creds.expired and creds.refresh_token:
                 creds.refresh(Request())
             else:
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    CREDENTIALS_FILE,
-                    SCOPES,
-                )
-
-                auth_url, _ = flow.authorization_url(
-                    access_type="offline",
-                    prompt="consent",
-                )
-
-                print("\nAuthorize this application by visiting this URL:\n")
-                print(auth_url)
-                print("\nWaiting for authorization...\n")
-
-                creds = flow.run_local_server(
-                    port=0,
-                    open_browser=False,
-                )
-
-            with open(TOKEN_FILE, "w") as token:
-                token.write(creds.to_json())
+                raise RuntimeError("Invalid Google Calendar credentials")
 
         return build("calendar", "v3", credentials=creds)
 

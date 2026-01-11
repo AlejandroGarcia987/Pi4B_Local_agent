@@ -5,7 +5,7 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from src.config import settings
 from src.llm_client import ask_llm
-
+from src.calendar_client import GoogleCalendarClient
 
 # Logging basic config
 
@@ -22,6 +22,34 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await update.message.reply_html(
         f"Hello {user.mention_html()}! I am your Local Agent, ready for service.",
     )
+
+async def today_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Return today's calendar events."""
+    calendar_client = GoogleCalendarClient()
+    try:
+        events = calendar_client.get_events_today()
+        if not events:
+            await update.message.reply_text("No events scheduled for today.")
+            return
+
+        lines = ["*Today's events:*"]
+        for e in events:
+            start = e["start"].get("dateTime", e["start"].get("date"))
+            summary = e.get("summary", "No title")
+            lines.append(f"- {start} · {summary}")
+
+        await update.message.reply_text(
+            "\n".join(lines),
+            parse_mode="Markdown"
+        )
+
+    except Exception:
+    	logger.exception("Calendar error")
+    	await update.message.reply_text("Error reading calendar.")
+
+
+
+
 
 async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # Forward User message to LLM and answer (simple)
@@ -68,6 +96,7 @@ def main():
 
     #Suscribe handlers
     application.add_handler(CommandHandler("start", start_command))
+    application.add_handler(CommandHandler("today", today_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
 
     logger.info("Agent is starting to poll for updates...")
