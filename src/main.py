@@ -5,7 +5,7 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from src.config import settings
 from src.llm_client import ask_llm
-from src.calendar_client import GoogleCalendarClient
+from src.tools.calendar_tools import get_today_events
 
 # Logging basic config
 
@@ -23,11 +23,12 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         f"Hello {user.mention_html()}! I am your Local Agent, ready for service.",
     )
 
+
+
 async def today_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Return today's calendar events."""
-    calendar_client = GoogleCalendarClient()
     try:
-        events = calendar_client.get_events_today()
+        events = get_today_events()
+
         if not events:
             await update.message.reply_text("No events scheduled for today.")
             return
@@ -44,10 +45,8 @@ async def today_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
 
     except Exception:
-    	logger.exception("Calendar error")
-    	await update.message.reply_text("Error reading calendar.")
-
-
+        logger.exception("Calendar error")
+        await update.message.reply_text("Error reading calendar.")
 
 
 
