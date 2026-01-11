@@ -6,6 +6,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from src.config import settings
 from src.llm_client import ask_llm
 from src.tools.calendar_tools import get_today_events
+from src.intent_router import detect_intent
 
 # Basic Logging
 logging.basicConfig(
@@ -79,7 +80,25 @@ async def handle_llm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         )
 
 
+
 async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    text = update.message.text
+    intent = detect_intent(text)
+
+    if intent == "CALENDAR_TODAY":
+        await today_command(update, context)
+        return
+
+    # fallback to LLM
+    await handle_llm(update, context)
+
+
+
+
+
+
+
+async def _echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = update.message.text.lower().strip()
 
     # hard rules first
