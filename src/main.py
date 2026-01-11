@@ -7,8 +7,6 @@ from src.config import settings
 from src.llm_client import ask_llm
 from src.tools.calendar_tools import get_today_events
 
-# Logging basic config
-
 # Basic Logging
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -50,30 +48,53 @@ async def today_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 
-async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # Forward User message to LLM and answer (simple)
-    user_text = update.message.text
-    sent = await update.message.reply_text(f"Received message: '{user_text}'. Processing...")
 
-    # Build a short prompt; tune prompt engineering here
+async def handle_llm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_text = update.message.text
+
+    sent = await update.message.reply_text(
+        f"Received message: '{user_text}'. Processing..."
+    )
+
     prompt = f"User: {user_text}\n\nAnswer in Spanish"
 
-    # Call LLM (async)
     llm_resp = await ask_llm(prompt, timeout_s=settings.LLM_TIMEOUT_S)
 
     if llm_resp:
-        # send final answer (edit the placeholder message)
         try:
-            await context.bot.edit_message_text(chat_id=sent.chat_id, message_id=sent.message_id, text=llm_resp)
+            await context.bot.edit_message_text(
+                chat_id=sent.chat_id,
+                message_id=sent.message_id,
+                text=llm_resp,
+            )
         except Exception:
-            # fallback: send a new message
-            await context.bot.send_message(chat_id=sent.chat_id, text=llm_resp)
+            await context.bot.send_message(
+                chat_id=sent.chat_id,
+                text=llm_resp,
+            )
     else:
-        try:
-            await context.bot.edit_message_text(chat_id=sent.chat_id, message_id=sent.message_id,
-                                                text="No response from LLM (timeout/error).")
-        except Exception:
-            await context.bot.send_message(chat_id=sent.chat_id, text="No response from LLM (timeout/error).")
+        await context.bot.send_message(
+            chat_id=sent.chat_id,
+            text="No response from LLM (timeout/error).",
+        )
+
+
+async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    text = update.message.text.lower().strip()
+
+    # hard rules first
+    if text in {"hi", "hola", "hello"}:
+        await update.message.reply_text("¡Hola! ¿En qué puedo ayudarte?")
+        return
+
+    if "calendar" in text or "agenda" in text:
+        await update.message.reply_text(
+            "Puedes usar /today para ver tus eventos de hoy."
+        )
+        return
+
+    #fallback to LLM
+    await handle_llm(update, context)
 
 
 async def echo_legacy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
