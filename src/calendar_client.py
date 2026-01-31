@@ -1,4 +1,4 @@
-import datetime
+from datetime import datetime, timedelta
 import os
 from typing import List, Dict
 
@@ -6,9 +6,8 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
-
-# ===== CONFIG =====
-SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
+#CONFIG 
+SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SECRETS_DIR = os.path.join(BASE_DIR, "secrets")
@@ -23,8 +22,7 @@ class GoogleCalendarClient:
     def _authenticate(self):
         if not os.path.exists(TOKEN_FILE):
             raise RuntimeError(
-                "Google Calendar token not found. "
-                "Run OAuth flow on host first."
+                "Google Calendar token not found. Run OAuth flow first."
             )
 
         creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
@@ -37,25 +35,13 @@ class GoogleCalendarClient:
 
         return build("calendar", "v3", credentials=creds)
 
+    #READ
+
     def get_events_today(self) -> List[Dict]:
-        now = datetime.datetime.utcnow()
-        start = datetime.datetime.combine(
-            now.date(), datetime.time.min
-        ).isoformat() + "Z"
-        end = datetime.datetime.combine(
-            now.date(), datetime.time.max
-        ).isoformat() + "Z"
-
+        now = datetime.utcnow()
+        start = datetime.combine(now.date(), datetime.min.time()).isoformat() + "Z"
+        end = datetime.combine(now.date(), datetime.max.time()).isoformat() + "Z"
         return self._get_events(start, end)
-
-    def get_events_next_days(self, days: int = 7) -> List[Dict]:
-        now = datetime.datetime.utcnow()
-        end = now + datetime.timedelta(days=days)
-
-        return self._get_events(
-            now.isoformat() + "Z",
-            end.isoformat() + "Z",
-        )
 
     def _get_events(self, time_min: str, time_max: str) -> List[Dict]:
         events_result = (
@@ -69,5 +55,30 @@ class GoogleCalendarClient:
             )
             .execute()
         )
-
         return events_result.get("items", [])
+
+    #WRITE
+
+    def create_event(self, title: str, date: str, time: str):
+        start_dt = datetime.fromisoformat(f"{date}T{time}")
+        end_dt = start_dt + timedelta(hours=1)
+
+        event = {
+            "summary": title,
+            "start": {
+                "dateTime": start_dt.isoformat(),
+                "timeZone": "Europe/Madrid",
+            },
+            "end": {
+                "dateTime": end_dt.isoformat(),
+                "timeZone": "Europe/Madrid",
+            },
+        }
+
+        created_event = (
+            self.service.events()
+            .insert(calendarId="primary", body=event)
+            .execute()
+        )
+
+        return created_event

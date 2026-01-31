@@ -24,32 +24,36 @@ User text:
 async def parse_calendar_create(text: str) -> Optional[Dict]:
     """
     Uses the LLM to extract structured calendar event data from free text.
-    Returns a dict if parsing succeeds, or None if it fails.
     """
 
     prompt = CALENDAR_CREATE_PROMPT.format(user_text=text)
 
     response = await ask_llm(
         prompt,
-        timeout_s = settings.LLM_TIMEOUT_S
+        timeout_s=settings.LLM_TIMEOUT_S,
     )
-    logging.getLogger(__name__).info(f"LLM raw output: {response}")
 
-    response = response.strip()
-    if response.startswith("```"):
-    	response = response.replace("```json", "").replace("```", "").strip()
+    logging.getLogger(__name__).info(f"LLM raw output: {response}")
 
     if not response:
         return None
+
+    response = response.strip()
+
+    # Remove markdown fences
+    if response.startswith("```"):
+        response = (
+            response.replace("```json", "")
+            .replace("```", "")
+            .strip()
+        )
 
     try:
         data = json.loads(response)
     except json.JSONDecodeError:
         return None
 
-    #Verify correct action
     if data.get("intent") != "CALENDAR_CREATE":
         return None
 
     return data
-
