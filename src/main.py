@@ -7,6 +7,8 @@ from src.config import settings
 from src.llm_client import ask_llm
 from src.tools.calendar_tools import get_today_events
 from src.intent_router import detect_intent
+from src.tools.calendar_parser import parse_calendar_create
+
 
 # Basic Logging
 logging.basicConfig(
@@ -21,6 +23,47 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await update.message.reply_html(
         f"Hello {user.mention_html()}! I am your Local Agent, ready for service.",
     )
+
+
+async def handle_calendar_create(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_text = update.message.text
+
+    await update.message.reply_text("Entendido. Analizando el evento…")
+
+    data = await parse_calendar_create(user_text)
+
+    if not data:
+        await update.message.reply_text(
+            "No he podido entender bien el evento. "
+            "¿Puedes reformularlo?"
+        )
+        return
+
+    lines = ["*Nuevo evento detectado:*"]
+
+    if data.get("title"):
+        lines.append(f"- Título: {data['title']}")
+    if data.get("date"):
+        lines.append(f"- Fecha: {data['date']}")
+    if data.get("time"):
+        lines.append(f"- Hora: {data['time']}")
+    if data.get("duration_minutes"):
+        lines.append(f"- Duración: {data['duration_minutes']} min")
+    if data.get("description"):
+        lines.append(f"- Descripción: {data['description']}")
+
+    lines.append("")
+    lines.append("¿Quieres que lo cree en el calendario? (sí / no)")
+
+    # Save state for next 
+    context.user_data["pending_calendar_event"] = data
+
+    await update.message.reply_text(
+        "\n".join(lines),
+        parse_mode="Markdown"
+    )
+
+
 
 
 
@@ -87,6 +130,10 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     if intent == "CALENDAR_TODAY":
         await today_command(update, context)
+        return
+
+    if intent == "CALENDAR_CREATE":
+        await handle_calendar_create(update, context)
         return
 
     # fallback to LLM
