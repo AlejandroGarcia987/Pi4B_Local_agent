@@ -31,6 +31,7 @@ async def handle_calendar_create(update: Update, context: ContextTypes.DEFAULT_T
     await update.message.reply_text("Entendido. Analizando el evento…")
 
     data = await parse_calendar_create(user_text)
+    logger.info(f"Pared calendar data: {data}")
 
     if not data:
         await update.message.reply_text(

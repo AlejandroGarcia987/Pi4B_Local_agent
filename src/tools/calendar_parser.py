@@ -1,7 +1,9 @@
+import logging
 import json
 from typing import Optional, Dict
 
 from src.llm_client import ask_llm
+from src.config import settings
 
 CALENDAR_CREATE_PROMPT = """
 You are an assistant that extracts structured calendar information.
@@ -27,7 +29,15 @@ async def parse_calendar_create(text: str) -> Optional[Dict]:
 
     prompt = CALENDAR_CREATE_PROMPT.format(user_text=text)
 
-    response = await ask_llm(prompt)
+    response = await ask_llm(
+        prompt,
+        timeout_s = settings.LLM_TIMEOUT_S
+    )
+    logging.getLogger(__name__).info(f"LLM raw output: {response}")
+
+    response = response.strip()
+    if response.startswith("```"):
+    	response = response.replace("```json", "").replace("```", "").strip()
 
     if not response:
         return None
