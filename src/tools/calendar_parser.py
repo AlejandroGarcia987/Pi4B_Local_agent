@@ -12,18 +12,27 @@ Return ONLY valid JSON in this format:
 {{
   "intent": "CALENDAR_CREATE",
   "title": "<event title or null>",
-  "date": "<YYYY-MM-DD or null>",
+  "date_ref": "<today | tomorrow | day_after_tomorrow | null>",
+  "weekday": "<monday | tuesday | wednesday | thursday | friday | saturday | sunday | null>",
   "time": "<HH:MM or null>"
 }}
+
+Rules:
+- Do NOT return absolute dates (YYYY-MM-DD).
+- If the user says "mañana", use "tomorrow".
+- If the user mentions a weekday, use "weekday".
+- Use null if information is missing.
 
 User text:
 {user_text}
 """
 
 
+
 async def parse_calendar_create(text: str) -> Optional[Dict]:
     """
-    Uses the LLM to extract structured calendar event data from free text.
+    Uses the LLM to extract structured calendar intent data.
+    Returns a dict or None if parsing fails.
     """
 
     prompt = CALENDAR_CREATE_PROMPT.format(user_text=text)
@@ -40,7 +49,7 @@ async def parse_calendar_create(text: str) -> Optional[Dict]:
 
     response = response.strip()
 
-    # Remove markdown fences
+    # Remove markdown fences if present
     if response.startswith("```"):
         response = (
             response.replace("```json", "")
@@ -53,7 +62,14 @@ async def parse_calendar_create(text: str) -> Optional[Dict]:
     except json.JSONDecodeError:
         return None
 
+    # Hard validation
     if data.get("intent") != "CALENDAR_CREATE":
         return None
+
+    # Normalize missing keys
+    data.setdefault("title", None)
+    data.setdefault("date_ref", None)
+    data.setdefault("weekday", None)
+    data.setdefault("time", None)
 
     return data
