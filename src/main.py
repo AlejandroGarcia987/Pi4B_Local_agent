@@ -1,7 +1,7 @@
 import sys
 import platform
 import logging
-from datetime import date, timedelta
+from datetime import date
 
 from telegram import Update
 from telegram.ext import (
@@ -18,16 +18,33 @@ from src.intent_router import detect_intent
 from src.tools.calendar_tools import get_today_events
 from src.tools.calendar_parser import parse_calendar_create
 from src.calendar_client import GoogleCalendarClient
+from src.tools.date_resolver import resolve_event_date
 
 # In-memory state (chat_id -> pending event)
 PENDING_CALENDAR_EVENTS = {}
 
-# Logging setup
+# Logging
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
+
+
+def normalize_title(title: str | None) -> str:
+    if not title:
+        return "Evento"
+
+    junk = [
+        "mañana", "hoy", "pasado mañana",
+        "a las", "am", "pm"
+    ]
+
+    t = title.lower()
+    for j in junk:
+        t = t.replace(j, "")
+
+    return t.strip().capitalize()
 
 
 # Commands
@@ -63,7 +80,7 @@ async def today_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.message.reply_text("Error reading calendar.")
 
 
-# Calendar creation flow
+# Calendar creation
 
 async def handle_calendar_create(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_text = update.message.text
@@ -79,21 +96,23 @@ async def handle_calendar_create(update: Update, context: ContextTypes.DEFAULT_T
         )
         return
 
+    resolved_date = resolve_event_date(data)
+    data["date"] = resolved_date
+    data["title"] = normalize_title(data.get("title"))
+
+    if not data.get("date") or not data.get("time"):
+        await update.message.reply_text(
+            "No he podido determinar la fecha u hora del evento."
+        )
+        return
+
     chat_id = update.effective_chat.id
-    PENDING_CALENDAR_EVENTS[chat_id] = {
-        "raw_text": user_text,
-        "data": data,
-    }
+    PENDING_CALENDAR_EVENTS[chat_id] = data
 
     lines = ["*Nuevo evento detectado:*"]
-
-    if data.get("title"):
-        lines.append(f"- Título: {data['title']}")
-    if data.get("date"):
-        lines.append(f"- Fecha: {data['date']}")
-    if data.get("time"):
-        lines.append(f"- Hora: {data['time']}")
-
+    lines.append(f"- Título: {data['title']}")
+    lines.append(f"- Fecha: {data['date']}")
+    lines.append(f"- Hora: {data['time']}")
     lines.append("")
     lines.append("¿Quieres que lo cree en el calendario? (sí / no)")
 
@@ -103,11 +122,10 @@ async def handle_calendar_create(update: Update, context: ContextTypes.DEFAULT_T
     )
 
 
-async def handle_calendar_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """
-    Handles yes/no confirmation.
-    Returns True if handled.
-    """
+async def handle_calendar_confirmation(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> bool:
     chat_id = update.effective_chat.id
     text = update.message.text.lower().strip()
 
@@ -117,35 +135,18 @@ async def handle_calendar_confirmation(update: Update, context: ContextTypes.DEF
     if text not in {"sí", "si", "no"}:
         return False
 
-    pending = PENDING_CALENDAR_EVENTS.pop(chat_id)
-    data = pending["data"]
-    raw_text = pending["raw_text"]
+    data = PENDING_CALENDAR_EVENTS.pop(chat_id)
 
     if text == "no":
         await update.message.reply_text("Evento cancelado.")
         return True
 
-    # Resolve date if missing
-    event_date = data.get("date")
-    if not event_date:
-        raw_lower = raw_text.lower()
-
-        if "mañana" in raw_lower:
-            event_date = (date.today() + timedelta(days=1)).isoformat()
-        elif "pasado mañana" in raw_lower:
-            event_date = (date.today() + timedelta(days=2)).isoformat()
-        else:
-            await update.message.reply_text(
-                "No he podido determinar la fecha del evento."
-            )
-            return True
-
     try:
         calendar = GoogleCalendarClient()
         calendar.create_event(
-            title=data.get("title") or "Evento",
-            date=event_date,
-            time=data.get("time"),
+            title=data["title"],
+            date=data["date"],
+            time=data["time"],
         )
     except Exception:
         logger.exception("Error creating calendar event")
@@ -182,10 +183,9 @@ async def handle_llm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         )
 
 
-# Main text router
+# Router
 
 async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # Confirmation step
     handled = await handle_calendar_confirmation(update, context)
     if handled:
         return
@@ -204,7 +204,7 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await handle_llm(update, context)
 
 
-# App bootstrap
+# Bootstrap
 
 def main():
     print("--- Local Agent System Info ---")
