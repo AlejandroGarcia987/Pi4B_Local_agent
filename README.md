@@ -3,26 +3,30 @@
 
 ## Project Overview
 
-This project implements a local AI agent running entirely on a Raspberry Pi 4B (4GB RAM).
-The agent exposes a conversational interface through a Telegram bot, processes messages using a local LLM, and executes deterministic tools such as Google Calendar queries. The goal of the project is not raw performance, but to explore the real limits, trade-offs, and architectural patterns required to run an autonomous agent on constrained embedded hardware.
+This project implements a local, tool-first AI agent running entirely on a Raspberry Pi 4B (4GB RAM). The agent exposes a conversational interface through Telegram, uses a local LLM only as a language interface, and executes deterministic, explicitly confirmed actions such as creating real Google Calendar events.
 
-This repository is about:
+The focus of this project is not raw AI capability, but architecture, control, and reliability on constrained hardware:
 
 - Running LLM-based agents on low-resource devices.
-- Hybrid decision logic: deterministic rules + intent detection + LLM fallback.
+- Deterministic-first agent design with LLM-assisted parsing and explicit fallback.
 - Secure API access (Telegram, Google Calendar) from a headless environment.
 - Clean separation between infrastructure, tools, and agent logic.
 - Containerized deployment with Docker.
+- Deterministic execution of real-world actions.
+- Safe failure modes and explicit human confirmation.
 
 ---
 
-## Design Philosophy: Tool-First, LLM as Fallback
+## Design Philosophy: Tool-First, LLM as Fallback (Not LLM-Driven)
 
-This project intentionally avoids delegating all decisions to the LLM and follows a tool-first architecture for the agent.
+The agent follows a tool-first architecture with very strict boundaries around the LLM.
+
+Core principles:
 
 1. User input is analyzed using deterministic rules and intent detection.
-2. If the intent matches a known capability (e.g. calendar queries), the agent executes explicit Python code.
-3. Only when no known intent is detected, the request is forwarded to the local LLM.
+2. The LLM never decides whether an action should happen.
+3. If the intent matches a known capability (e.g. calendar queries), the agent executes explicit Python code.
+4. The LLM is only used to extract structured data from natural language or as a fallback if no action is required.
 
 With this approach, a predictable and controllable behavior is achieved with low latency and reduced memory pressure which is critic in constrained hardware enviroments. The LLM is treated as a language interface, not as a decision oracle.
 
@@ -71,9 +75,12 @@ Model size and quantization are critical constraints on 4GB devices.
            │
            ▼
     Local Agent (Raspberry Pi 4B)
-    ├─ Intent Router (rules / keywords)
-    ├─ Tool Layer (Google Calendar)
-    └─ LLM Fallback (Ollama → local model)
+    |--Intent Detection (deterministic)
+    |--Tool Router
+    |--LLM Parser if required (JSON extraction only)
+    |--Deterministic Logic (dates, validation)
+    |--Tool Execution (Google Calendar API)
+    |--LLM Fallback if required (Ollama → local model)
            │
            ▼
     User receives agent response
@@ -82,6 +89,7 @@ The agent operates as follows:
 
 - Detect user intent.
 - If intent matches a known tool → execute deterministic code.
+- If create event action is detected, LLM extracts data and provides JSON.
 - Otherwise → fallback to the local LLM.
 
 ---
@@ -108,20 +116,33 @@ While swap does not increase raw inference speed, it is essential for system sta
 
 ---
 
-## Google Calendar Integration (Headless & Secure)
+## Google Calendar Integration (Read & Create)
 
-The agent can read **today’s Google Calendar events** in two ways:
+The agent supports real Google Calendar interaction, including event creation.
 
-- Explicitly, using the `/today` Telegram command.
-- Implicitly, through intent detection when the user writes natural language messages containing calendar-related keywords such as:
-  - “hoy”
-  - “eventos”
-  - “agenda”
-  - “calendario”
+### Event creation flow
+1. User requests an action (e.g. "mañana a las 7 reunión con Ainhoa").
+2. Intent CALENDAR_CREATE is detected.
+3. The LLM extracts structured fields:
+   - title
+   - time
+   - relative references (tomorrow, weekday, etc.)
+4. All dates are resolved deterministically in Python using the system date.
+5. The agent asks for explicit confirmation (yes / no).
+6. The event is created only after confirmation.
 
+### Calendar Query Flow (LLM Bypassed)
+1. The user requests today’s agenda, either:
+   - Explicitly, using the /today Telegram command.
+   - Implicitly, using natural language (e.g. “¿qué eventos tengo hoy?”).
+2. The intent CALENDAR_TODAY is detected using deterministic rules
+   (command matching and keyword-based intent detection).
+3. The LLM is completely bypassed for this flow.
+4. The agent executes deterministic Python logic in order to resolve “today” using the system date and query Google Calendar for events within today’s time window.
+5. Retrieved events are formatted and sent back to the user.
 This allows the agent to respond correctly to messages like:
-> “Eventos hoy”  
-> “¿Qué tengo en la agenda?”  
+- “Eventos hoy”  
+- “¿Qué tengo en la agenda?”  
 
 without requiring a strict command-based interaction.
 
@@ -190,6 +211,9 @@ Tailscale setup is outside the scope of this repository.
 - Telegram-based conversational interface.
 - Local LLM inference on Raspberry Pi.
 - Deterministic Google Calendar queries (`/today`).
+- LLM-assisted structured parsing (JSON only)
+- Explicit user confirmation
+- Google Calendar event creation
 - Keyword-based intent detection for calendar-related queries (e.g. “hoy”, “eventos”, “agenda”), without requiring explicit commands.
 - Intent-based routing with deterministic tools first and LLM fallback.
 - Fully containerized deployment (Docker).
@@ -206,8 +230,9 @@ Tailscale setup is outside the scope of this repository.
 - Additional lightweight models.
 
 ### Tooling
-- Create / delete calendar events.
 - Scheduled tasks (daily summaries, reminders).
+- Event duration support.
+- Calendar availability queries
 - Weather and news integrations.
 
 ### Infrastructure
@@ -217,19 +242,35 @@ Tailscale setup is outside the scope of this repository.
 
 ---
 
-## Example Interaction
+## Examples of interactions with the agent
+
+### Answering "/today" command.
 
 Below is a real example of the agent running on a Raspberry Pi, interacting through Telegram.
 The agent correctly responds both to the `/today` command and to natural language queries such as “Eventos hoy”, using intent detection instead of relying on the LLM.
 
 <img width="348" height="756" alt="image" src="https://github.com/user-attachments/assets/35672da0-1a8b-4ee3-ab71-446a6626e708" />
 
+### From Message to Real Event
+
+1. Telegram interaction (user request and explicit confirmation):
+    User requests the action in natural language and explicitly confirms before execution.
+<img width="348" height="751" alt="creacion" src="https://github.com/user-attachments/assets/25a6e4eb-da28-48ac-8572-4d22d9bd85b1" />
+
+2. Raw LLM structured output (parsing only):
+    LLM output used exclusively for structured data extraction, never for decision-making.
+   
+<img width="900" height="207" alt="llm_raw" src="https://github.com/user-attachments/assets/f20b3986-5344-4bfb-bebc-1d88074b8004" />
+
+3. Resulting Google Calendar event:
+    Deterministic tool execution creates the real calendar event after confirmation.
+   
+<img width="450" height="322" alt="reunion_final" src="https://github.com/user-attachments/assets/3ba5f40f-4cf3-4610-bdde-aa22e92b2480" />
 
 ---
-
 ## About This Project
 
-This is an evolving personal project focused on **learning, experimentation, and architectural exploration**.
+This is an evolving personal project focused on learning, experimentation, and architectural exploration.
 The repository and documentation will continue to evolve as new features and improvements are implemented.
 So, be patient... ;)
 
